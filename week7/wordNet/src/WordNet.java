@@ -7,7 +7,7 @@ import java.util.HashSet;
  */
 public class WordNet {
     private HashMap<Integer, String> idToSynset;        // an id has exactly one synset
-    private HashMap<String, HashSet<Integer>> nounToId; // a noun many have many ids
+    private HashMap<String, HashSet<Integer>> nounToIds; // a noun many have many ids
     private Digraph g;
     private SAP s;
 
@@ -25,7 +25,7 @@ public class WordNet {
         // ids when parsing hypernyms, rooted DAG should have one id left
         HashSet<Integer> rootCheck = new HashSet<Integer>();
         idToSynset = new HashMap<Integer, String>();
-        nounToId = new HashMap<String, HashSet<Integer>>();
+        nounToIds = new HashMap<String, HashSet<Integer>>();
 
         // read in synsets and build two hash maps
         In syn = new In(synsets);
@@ -38,12 +38,12 @@ public class WordNet {
             nouns = fields[1].split("\\s+");
             for (int i = 0; i < nouns.length; i++) {
                 String noun = nouns[i];
-                if (nounToId.containsKey(noun)) {
-                    nounToId.get(noun).add(id);
+                if (nounToIds.containsKey(noun)) {
+                    nounToIds.get(noun).add(id);
                 } else {
                     HashSet<Integer> h = new HashSet<Integer>();
                     h.add(id);
-                    nounToId.put(noun, h);
+                    nounToIds.put(noun, h);
                 }
             }
             counter++;
@@ -63,7 +63,8 @@ public class WordNet {
         // check if given digraph is a rooted DAG
         dc = new DirectedCycle(g);
         if (dc.hasCycle()) throw new IllegalArgumentException("Given graph has a cycle");
-        if (rootCheck.size() != 1) throw new IllegalArgumentException("Given graph not rooted");
+        StdOut.println(rootCheck);
+        if (rootCheck.size() > 1) throw new IllegalArgumentException("Given graph not rooted");
 
         // build sap
         s = new SAP(g);
@@ -73,14 +74,14 @@ public class WordNet {
      * the set of nouns (no duplicates), returned as an Iterable
      */
     public Iterable<String> nouns() {
-        return nounToId.keySet();
+        return nounToIds.keySet();
     }
 
     /**
      * is the word a WordNet noun?
      */
     public boolean isNoun(String word) {
-        return nounToId.containsKey(word);
+        return nounToIds.containsKey(word);
     }
 
     // helper for distance and sap
@@ -94,7 +95,7 @@ public class WordNet {
      */
     public int distance(String nounA, String nounB) {
         checkNoun(nounA, nounB);
-        return s.length(nounToId.get(nounA), nounToId.get(nounB));
+        return s.length(nounToIds.get(nounA), nounToIds.get(nounB));
     }
 
     /**
@@ -103,7 +104,7 @@ public class WordNet {
      */
     public String sap(String nounA, String nounB) {
         checkNoun(nounA, nounB);
-        return idToSynset.get(s.ancestor(nounToId.get(nounA), nounToId.get(nounB)));
+        return idToSynset.get(s.ancestor(nounToIds.get(nounA), nounToIds.get(nounB)));
     }
 
     /**
