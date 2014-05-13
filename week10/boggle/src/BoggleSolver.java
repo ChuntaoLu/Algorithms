@@ -6,13 +6,14 @@ import java.util.Stack;
  * Data type to solve the boggle game
  */
 public class BoggleSolver {
-    private PrefixTrieST<Integer> dict; // dictionary of all valid words
-    private HashSet<String> words;      // words that can be generate by given board
-    private BoggleBoard bBoard;         // the given boggle board
-    private int rows;                   // number of rows of the given board
-    private int cols;                   // number of columns of the given board
-    private Stack<Integer>[] neighbors; // cache neighbors for each element on board
-//    private String lastPrefix;          // cache last prefix, search based on its result
+    private PrefixTrieST<Integer> dict;     // dictionary of all valid words
+    private HashSet<String> words;          // words that can be generate by given board
+    private BoggleBoard bBoard;             // the given boggle board
+    private int rows;                       // number of rows of the given board
+    private int cols;                       // number of columns of the given board
+    private Stack<Integer>[][] neighbors;   // cache neighbors for each element on board
+    private boolean[][] inCurrentPrefix;    // mark character in use if it's in current prefix
+    private Stack<PrefixTrieST.Node> prefixNodeStack;   // tracks the node, search optimization
 
     /**
      * initializes dict by given array of strings
@@ -31,108 +32,107 @@ public class BoggleSolver {
         bBoard = board;
         rows = bBoard.rows();
         cols = bBoard.cols();
-        neighbors = new Stack[rows * cols];
-//        lastPrefix = "";
+        neighbors = new Stack[rows][cols];
 
         buildNeighbors();
 
         // for each character on board run depth first search
         for (int i = 0; i < rows; i++) {
             for (int j = 0; j < cols; j++) {
-                dfs(i, j);
+                inCurrentPrefix = new boolean[rows][cols];       // mark character is in use, reset for every dfs
+                prefixNodeStack = new Stack<PrefixTrieST.Node>();// track the last node
+                prefixNodeStack.push(dict.root());               // start from the root
+                dfs("", i, j);
             }
         }
         return words;
     }
 
-    // helper for build neighbors cache
+    // helper for building neighbors cache
     private void buildNeighbors() {
-        int neighbor;
         for (int row = 0; row < rows; row++) {
             for (int col = 0; col < cols; col++) {
                 Stack<Integer> neighborsStack = new Stack<Integer>();
                 for (int i = row - 1; i < row + 2; i++) {
                     for (int j = col - 1; j < col + 2; j++) {
-                        neighbor = toOneD(i, j);
                         if (i > - 1 && i < rows && j > -1 && j < cols)
-                            neighborsStack.push(neighbor);
+                            neighborsStack.push(toOneD(i, j));
                     }
                 }
-                neighbors[toOneD(row, col)] = neighborsStack;
+                neighbors[row][col] = neighborsStack;
             }
         }
     }
 
     // helper for getAllValidWords
-    private void dfs(int row, int col) {
-        Stack<Integer> letterStack = new Stack<Integer>();      // board character index in one dimension
-        Stack<Integer> traceStack = new Stack<Integer>();       // tracking depth, value is the number of elements in current depth
-        Stack<Integer> prefixStack = new Stack<Integer>();      // for constructing current prefix
-        boolean[] inCurrentPrefix = new boolean[rows * cols];   // if character is in use, reset for every dfs
+    private void dfs(String prefix, int row, int col) {
+        // get the letter at position (row, col)
+        char c = bBoard.getLetter(row, col);
+        inCurrentPrefix[row][col] = true;
 
-        // start from the given index
-        letterStack.push(toOneD(row, col));
-        traceStack.push(1);
+        // get the node in tire corresponding to the letter
+        // prefixNodeStack top is the most recent node, optimized search
+        PrefixTrieST.Node x = dict.nextNode(prefixNodeStack, c);
 
-        // trace top being zero means current depth is done, so pop the zero and trace one depth up
-        // whenever tracing one depth up, prefixStack has to pop one character
-        while (!letterStack.isEmpty()) {
-            // backtrace if elements in current depth are exhausted
-            while (traceStack.peek() == 0) {
-                traceStack.pop();
-                inCurrentPrefix[prefixStack.pop()] = false;
+        // debug
+//        StdOut.println(prefix + " -> " + c);
+//        StdOut.println(x == null);
+//        for (int i = 0; i < 4; i++) {
+//            for (int j = 0; j < 4; j++) {
+//                StdOut.print("  " + inCurrentPrefix[i][j]);
+//            }
+//            StdOut.println();
+//        }
+
+        // if node is not null, then update prefixNodeStack and recur
+        if (x != null) {
+            prefixNodeStack.push(x);
+            String newPrefix;
+
+            // deal with the special case of 'Qu'
+            if (c == 'Q') {
+                PrefixTrieST.Node uNode = dict.nextNode(prefixNodeStack, 'U');
+
+                // it's possible that 'QU' makes an invalid prefix, in which case clean up and return
+                if (uNode == null) {
+                    prefixNodeStack.pop();
+                    inCurrentPrefix[row][col] = false;
+                    return;
+                }
+
+                // if 'QU' makes valid prefix, uNode should be pushed onto stack
+                prefixNodeStack.push(uNode);
+                newPrefix = prefix + "QU";
+            } else {
+                newPrefix = prefix + c;
             }
 
-            int oneDIndex = letterStack.pop();
-            inCurrentPrefix[oneDIndex] = true;
-            prefixStack.push(oneDIndex);
-            traceStack.push(traceStack.pop() - 1);
+            // update words if newPrefix is a valid word
+            if (newPrefix.length() > 2 && dict.contains(newPrefix))
+                words.add(newPrefix);
 
-//            StdOut.println(prefixStack);
-            String prefix = currentPrefix(prefixStack);
-            if (prefix.length() > 2 && dict.contains(prefix)) {
-                words.add(prefix);
-            }
-
-            int counter = 0;
-            // grow prefix only if current prefix is in the dictionary
-//            StdOut.println(lastPrefix);
-//            StdOut.println(prefix);
-            if (dict.hasWordsWith(prefix)){
-//                StdOut.println(oneDIndex);
-//                StdOut.println(prefix);
-//                for (int i = 0; i < 4; i++) {
-//                    for (int j = 0; j < 4; j++) {
-//                        StdOut.print("  " + inCurrentPrefix[i * 4 + j]);
-//                    }
-//                    StdOut.println();
-//                }
-                for (int i: neighbors[oneDIndex]) {
-                    if (!inCurrentPrefix[i]){
-                        letterStack.push(i);
-                        counter++;
-                    }
+            // for each neighbor of the node, recur if not already in prefix string
+            for (int oneDIndex: neighbors[row][col]) {
+                int m = oneDIndex / cols;
+                int n = oneDIndex % cols;
+                if (!inCurrentPrefix[m][n]) {
+                    dfs(newPrefix, m, n);
                 }
             }
-            traceStack.push(counter);
-//            lastPrefix = prefix;
+
+            // upon finishing current depth, pop the node off prefixNodeStack
+            prefixNodeStack.pop();
+            if (c == 'Q') prefixNodeStack.pop();    // pop 'U' off the stack if special case
         }
+
+        // upon finishing current letter, mark it as not in use
+        inCurrentPrefix[row][col] = false;
     }
 
-
-    // helper for dfs and validNeighbors
-    private int toOneD(int row, int col) {
-        return row * cols + col;
-    }
 
     // helper for dfs
-    private String currentPrefix(Stack<Integer> s) {
-        StringBuilder out = new StringBuilder();
-        for (int i: s) {
-            char letter = bBoard.getLetter(i / cols, i % cols);
-            out.append(letter == 'Q'? "QU" : letter);
-        }
-        return out.toString();
+    private int toOneD(int row, int col) {
+        return row * cols + col;
     }
 
     /**

@@ -17,6 +17,8 @@
  *
  *************************************************************************/
 
+import java.util.*;
+
 /**
  *  The <tt>PrefixTrieST</tt> class represents an symbol table of key-value
  *  pairs, with string keys and generic values.
@@ -52,12 +54,19 @@ public class PrefixTrieST<Value> {
     private int N;          // number of keys in trie
 
     // R-way trie node
-    private static class Node {
+    public static class Node {
         private Object val;
         private Node[] next = new Node[R];
     }
 
     public PrefixTrieST() {
+    }
+
+    /**
+     * returns the root
+     */
+    public Node root(){
+        return root;
     }
 
    /**
@@ -96,12 +105,14 @@ public class PrefixTrieST<Value> {
     }
 
     /**
-     * Given a prefix, is there any word in the dictionary that starts with that prefix
-     * @param prefix the prefix query
+     * Given a prefix stack, return the node that's c child of the node at top of the stack
+     * @param prefixStack the prefix query
+     * @param c the next node index
      */
-    public boolean hasWordsWith(String prefix) {
-        Node x = get(root, prefix, 0);
-        return x != null;
+    public Node nextNode(java.util.Stack<Node> prefixStack, char c) {
+        Node[] x = prefixStack.peek().next;
+        return x[c - 'A'];
+//        return prefixStack.peek().next[c - 'A'];
     }
 
     /**
